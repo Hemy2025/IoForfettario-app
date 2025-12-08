@@ -78,22 +78,57 @@ export interface MultiYearResult {
   anni: FiscalYearResult[];
 }
 
-// TODO: sostituire questi valori con quelli reali (Excel + normativa)
+/**
+ * CONFIGURAZIONE PARAMETRI FISCALI
+ *
+ * NOTA: i valori per contributi fissi / soglie / aliquote sono riferiti al 2025
+ * e vanno eventualmente aggiornati anno per anno secondo normativa.
+ */
 export const TAX_CONFIG = {
+  /* -----------------------------------------------------------
+   * COEFFICIENTI DI REDDITIVITÀ (regime forfettario)
+   * --------------------------------------------------------- */
+  // Professionisti (servizi professionali, scientifici, tecnici, ecc.)
   coeffProfessionista: 0.78,
+  // Artigiani (es. edilizia, impiantisti, ecc.)
   coeffArtigiano: 0.86,
+  // Commercianti (ingrosso/dettaglio)
   coeffCommerciante: 0.4,
 
-  contributiFissiAnnuiArtigiani: 0,
-  contributiFissiAnnuiCommercianti: 0,
+  /* -----------------------------------------------------------
+   * CONTRIBUTI FISSI (ARTIGIANI / COMMERCIANTI) – ANNO 2025
+   * Valori indicativi, da confermare con il consulente fiscale.
+   * --------------------------------------------------------- */
+  // Contributi IVS fissi annui – Artigiani (titolare, senza riduzioni)
+  contributiFissiAnnuiArtigiani: 4460.64,
+  // Contributi IVS fissi annui – Commercianti (titolare, senza riduzioni)
+  contributiFissiAnnuiCommercianti: 4549.7,
 
-  sogliaContributiPercArtigiani: 0,
-  sogliaContributiPercCommercianti: 0,
+  /* -----------------------------------------------------------
+   * SOGLIA REDDITO PER CONTRIBUTI % SU ECCEDENZA
+   * L’eccedenza è calcolata sul reddito imponibile lordo
+   * (fatturato × coefficiente di redditività).
+   * --------------------------------------------------------- */
+  sogliaContributiPercArtigiani: 18555.0,
+  sogliaContributiPercCommercianti: 18555.0,
 
-  aliquotaPercArtigiani: 0,
-  aliquotaPercCommercianti: 0,
-  aliquotaPercGestioneSeparata: 0,
+  /* -----------------------------------------------------------
+   * ALIQUOTE CONTRIBUTIVE SU ECCEDENZA
+   * --------------------------------------------------------- */
+  // Artigiani – percentuale su quota eccedente il minimale
+  aliquotaPercArtigiani: 0.24, // 24%
 
+  // Commercianti – percentuale su quota eccedente il minimale
+  aliquotaPercCommercianti: 0.2448, // 24,48%
+
+  // Gestione separata – professionisti senza altra previdenza
+  // (aliquota complessiva IVS + altre componenti)
+  aliquotaPercGestioneSeparata: 0.2607, // 26,07%
+
+  /* -----------------------------------------------------------
+   * ACCONTI IMPOSTE E CONTRIBUTI
+   * Schema classico: 50% + 50%
+   * --------------------------------------------------------- */
   accontoPercentuale: 0.5,
 };
 
@@ -151,6 +186,7 @@ export function computeContributiInps(
 
     case "CASSA_PROFESSIONALE": {
       // In questa versione il dettaglio dei contributi di cassa non è gestito
+      // (si utilizza rivalsaCassaTotale o cassaAliquotaRivalsa a parte).
       return { fissi: 0, percentuali: 0 };
     }
 
@@ -159,6 +195,13 @@ export function computeContributiInps(
   }
 }
 
+/**
+ * Calcolo del reddito imponibile netto.
+ *
+ * - Anno 0: si sottraggono contributi fissi + percentuali dell'anno.
+ * - Anno 1+: si sottraggono i contributi versati l'anno precedente
+ *   (contributiVersatiPrecedente), in linea con la logica del tuo Excel.
+ */
 export function computeRedditoImponibileNetto(
   input: FiscalYearInput,
   redditoLordo: number,

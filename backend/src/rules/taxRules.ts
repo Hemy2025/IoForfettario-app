@@ -1,368 +1,424 @@
-// backend/src/rules/taxRules.ts
-// Motore a regole per il regime forfettario – IoForfettario
+// backend/tests/taxRules.test.ts
+// Test del motore a regole per il regime forfettario – IoForfettario
 
-export type ForfettarioCategory =
-  | "PROFESSIONISTA"
-  | "ARTIGIANO"
-  | "COMMERCIANTE";
-
-export type PrevidenzaTipo =
-  | "GESTIONE_SEPARATA"
-  | "ARTIGIANI_COMMERCIANTI"
-  | "CASSA_PROFESSIONALE";
-
-export interface UserTaxProfile {
-  category: ForfettarioCategory;
-  previdenza: PrevidenzaTipo;
-
-  hasCassaProfessionale: boolean;
-  cassaAliquotaRivalsa?: number; // es. 0.04
-
-  // 0.05 (5%) oppure 0.15 (15%)
-  aliquotaImpostaSostitutiva: number;
-}
-
-export interface FiscalYearInput {
-  year: number;
-  fatturato: number;
-
-  // Versato l'anno precedente (saldi + acconti)
-  contributiVersatiPrecedente: number;
-  imposteVersatePrecedente: number;
-
-  // Diritto camerale annuo
-  ccIAA: number;
-
-  // Opzionale: importo totale rivalsa cassa già calcolato
-  rivalsaCassaTotale?: number;
-}
-
-export interface FiscalYearResult {
-  year: number;
-
-  redditoImponibileLordo: number;
-  redditoImponibileNetto: number;
-
-  contributiInpsFissi: number;
-  contributiInpsPercentuali: number;
-  contributiTotaliVersatiAnnoPrecedente: number;
-
-  impostaSostitutivaLorda: number;
-  saldoImpostaSostitutiva: number;
-
-  primoAccontoImposta: number;
-  secondoAccontoImposta: number;
-
-  primoAccontoContributi: number;
-  secondoAccontoContributi: number;
-
-  importoRivalsaCassa?: number;
-  creditoDaCompensare?: number;
-
-  totaleF24Giugno: number;
-  totaleF24Novembre: number;
-
-  warnings: string[];
-}
-
-export interface MultiYearInput {
-  profile: UserTaxProfile;
-  anni: {
-    year: number;
-    fatturato: number;
-  }[];
-  ccIAA: number;
-}
-
-export interface MultiYearResult {
-  anni: FiscalYearResult[];
-}
+import {
+  computeFiscalYear,
+  computeMultiYear,
+  TAX_CONFIG,
+  type UserTaxProfile,
+  type FiscalYearInput,
+  type MultiYearInput,
+} from "../src/rules/taxRules";
 
 /**
- * CONFIGURAZIONE PARAMETRI FISCALI
- *
- * NOTA: i valori per contributi fissi / soglie / aliquote sono riferiti al 2025
- * e vanno eventualmente aggiornati anno per anno secondo normativa.
+ * NOTA:
+ * I test non usano numeri "magici" scritti a mano, ma
+ * ricalcolano gli attesi usando le stesse formule della normativa.
+ * In questo modo, se aggiorniamo TAX_CONFIG per anni futuri,
+ * i test restano consistenti con il modello di calcolo.
  */
-export const TAX_CONFIG = {
-  /* -----------------------------------------------------------
-   * COEFFICIENTI DI REDDITIVITÀ (regime forfettario)
-   * --------------------------------------------------------- */
-  // Professionisti (servizi professionali, scientifici, tecnici, ecc.)
-  coeffProfessionista: 0.78,
-  // Artigiani (es. edilizia, impiantisti, ecc.)
-  coeffArtigiano: 0.86,
-  // Commercianti (ingrosso/dettaglio)
-  coeffCommerciante: 0.4,
 
-  /* -----------------------------------------------------------
-   * CONTRIBUTI FISSI (ARTIGIANI / COMMERCIANTI) – ANNO 2025
-   * Valori indicativi, da confermare con il consulente fiscale.
-   * --------------------------------------------------------- */
-  // Contributi IVS fissi annui – Artigiani (titolare, senza riduzioni)
-  contributiFissiAnnuiArtigiani: 4460.64,
-  // Contributi IVS fissi annui – Commercianti (titolare, senza riduzioni)
-  contributiFissiAnnuiCommercianti: 4549.7,
-
-  /* -----------------------------------------------------------
-   * SOGLIA REDDITO PER CONTRIBUTI % SU ECCEDENZA
-   * L’eccedenza è calcolata sul reddito imponibile lordo
-   * (fatturato × coefficiente di redditività).
-   * --------------------------------------------------------- */
-  sogliaContributiPercArtigiani: 18555.0,
-  sogliaContributiPercCommercianti: 18555.0,
-
-  /* -----------------------------------------------------------
-   * ALIQUOTE CONTRIBUTIVE SU ECCEDENZA
-   * --------------------------------------------------------- */
-  // Artigiani – percentuale su quota eccedente il minimale
-  aliquotaPercArtigiani: 0.24, // 24%
-
-  // Commercianti – percentuale su quota eccedente il minimale
-  aliquotaPercCommercianti: 0.2448, // 24,48%
-
-  // Gestione separata – professionisti senza altra previdenza
-  // (aliquota complessiva IVS + altre componenti)
-  aliquotaPercGestioneSeparata: 0.2607, // 26,07%
-
-  /* -----------------------------------------------------------
-   * ACCONTI IMPOSTE E CONTRIBUTI
-   * Schema classico: 50% + 50%
-   * --------------------------------------------------------- */
-  accontoPercentuale: 0.5,
-};
-
-export function getCoeffRedditivita(profile: UserTaxProfile): number {
-  switch (profile.category) {
-    case "PROFESSIONISTA":
-      return TAX_CONFIG.coeffProfessionista;
-    case "ARTIGIANO":
-      return TAX_CONFIG.coeffArtigiano;
-    case "COMMERCIANTE":
-      return TAX_CONFIG.coeffCommerciante;
-    default:
-      return TAX_CONFIG.coeffProfessionista;
-  }
+function round2(x: number): number {
+  return Math.round(x * 100) / 100;
 }
 
-export function computeRedditoImponibileLordo(
-  profile: UserTaxProfile,
-  input: FiscalYearInput
-): number {
-  return input.fatturato * getCoeffRedditivita(profile);
-}
-
-export function computeContributiInps(
-  profile: UserTaxProfile,
-  redditoLordo: number
-): { fissi: number; percentuali: number } {
-  switch (profile.previdenza) {
-    case "GESTIONE_SEPARATA": {
-      const percentuali =
-        redditoLordo * TAX_CONFIG.aliquotaPercGestioneSeparata;
-      return { fissi: 0, percentuali };
-    }
-
-    case "ARTIGIANI_COMMERCIANTI": {
-      const isArt = profile.category === "ARTIGIANO";
-
-      const fissi = isArt
-        ? TAX_CONFIG.contributiFissiAnnuiArtigiani
-        : TAX_CONFIG.contributiFissiAnnuiCommercianti;
-
-      const soglia = isArt
-        ? TAX_CONFIG.sogliaContributiPercArtigiani
-        : TAX_CONFIG.sogliaContributiPercCommercianti;
-
-      const aliquota = isArt
-        ? TAX_CONFIG.aliquotaPercArtigiani
-        : TAX_CONFIG.aliquotaPercCommercianti;
-
-      const eccedenza = Math.max(0, redditoLordo - soglia);
-      const percentuali = eccedenza * aliquota;
-
-      return { fissi, percentuali };
-    }
-
-    case "CASSA_PROFESSIONALE": {
-      // In questa versione il dettaglio dei contributi di cassa non è gestito
-      // (si utilizza rivalsaCassaTotale o cassaAliquotaRivalsa a parte).
-      return { fissi: 0, percentuali: 0 };
-    }
-
-    default:
-      return { fissi: 0, percentuali: 0 };
-  }
-}
-
-/**
- * Calcolo del reddito imponibile netto.
- *
- * - Anno 0: si sottraggono contributi fissi + percentuali dell'anno.
- * - Anno 1+: si sottraggono i contributi versati l'anno precedente
- *   (contributiVersatiPrecedente), in linea con la logica del tuo Excel.
- */
-export function computeRedditoImponibileNetto(
-  input: FiscalYearInput,
-  redditoLordo: number,
-  contributiFissi: number,
-  contributiPercentuali: number
-): number {
-  const anno0 = input.contributiVersatiPrecedente <= 0;
-
-  if (anno0) {
-    return redditoLordo - contributiFissi - contributiPercentuali;
-  }
-
-  return redditoLordo - input.contributiVersatiPrecedente;
-}
-
-export function computeImpostaSostitutivaLorda(
-  profile: UserTaxProfile,
-  redditoNetto: number
-): number {
-  return redditoNetto * profile.aliquotaImpostaSostitutiva;
-}
-
-export function computeSaldoImpostaSostitutiva(
-  impostaLorda: number,
-  imposteVersatePrecedente: number
-): number {
-  return impostaLorda - imposteVersatePrecedente;
-}
-
-export function computeAcconti(
-  baseImposta: number,
-  baseContributi: number
-): {
-  primoAccontoImposta: number;
-  secondoAccontoImposta: number;
-  primoAccontoContributi: number;
-  secondoAccontoContributi: number;
-} {
-  const p = TAX_CONFIG.accontoPercentuale;
-
-  return {
-    primoAccontoImposta: baseImposta * p,
-    secondoAccontoImposta: baseImposta * p,
-    primoAccontoContributi: baseContributi * p,
-    secondoAccontoContributi: baseContributi * p,
+describe("Professionista – Gestione separata", () => {
+  const profile: UserTaxProfile = {
+    category: "PROFESSIONISTA",
+    previdenza: "GESTIONE_SEPARATA",
+    hasCassaProfessionale: false,
+    aliquotaImpostaSostitutiva: 0.05,
   };
-}
 
-export function computeTotaliF24(
-  ccIAA: number,
-  saldoImposta: number,
-  saldoContributiPercentuali: number,
-  primoAccontoImposta: number,
-  secondoAccontoImposta: number,
-  primoAccontoContributi: number,
-  secondoAccontoContributi: number
-): { giugno: number; novembre: number } {
-  const giugno =
-    saldoImposta +
-    saldoContributiPercentuali +
-    primoAccontoImposta +
-    primoAccontoContributi +
-    ccIAA;
-
-  const novembre = secondoAccontoImposta + secondoAccontoContributi;
-
-  return { giugno, novembre };
-}
-
-export function computeFiscalYear(
-  profile: UserTaxProfile,
-  input: FiscalYearInput
-): FiscalYearResult {
-  const warnings: string[] = [];
-
-  const redditoLordo = computeRedditoImponibileLordo(profile, input);
-  const { fissi, percentuali } = computeContributiInps(profile, redditoLordo);
-
-  const redditoNetto = computeRedditoImponibileNetto(
-    input,
-    redditoLordo,
-    fissi,
-    percentuali
-  );
-
-  const impostaLorda = computeImpostaSostitutivaLorda(profile, redditoNetto);
-
-  const saldoImposta = computeSaldoImpostaSostitutiva(
-    impostaLorda,
-    input.imposteVersatePrecedente
-  );
-
-  const acconti = computeAcconti(impostaLorda, percentuali);
-
-  const totaliF24 = computeTotaliF24(
-    input.ccIAA,
-    saldoImposta,
-    percentuali,
-    acconti.primoAccontoImposta,
-    acconti.secondoAccontoImposta,
-    acconti.primoAccontoContributi,
-    acconti.secondoAccontoContributi
-  );
-
-  const importoRivalsaCassa =
-    profile.hasCassaProfessionale && profile.cassaAliquotaRivalsa
-      ? input.fatturato * profile.cassaAliquotaRivalsa
-      : input.rivalsaCassaTotale;
-
-  const creditoDaCompensare = saldoImposta < 0 ? Math.abs(saldoImposta) : 0;
-
-  return {
-    year: input.year,
-    redditoImponibileLordo: redditoLordo,
-    redditoImponibileNetto: redditoNetto,
-    contributiInpsFissi: fissi,
-    contributiInpsPercentuali: percentuali,
-    contributiTotaliVersatiAnnoPrecedente:
-      input.contributiVersatiPrecedente,
-    impostaSostitutivaLorda: impostaLorda,
-    saldoImpostaSostitutiva: saldoImposta,
-    primoAccontoImposta: acconti.primoAccontoImposta,
-    secondoAccontoImposta: acconti.secondoAccontoImposta,
-    primoAccontoContributi: acconti.primoAccontoContributi,
-    secondoAccontoContributi: acconti.secondoAccontoContributi,
-    importoRivalsaCassa,
-    creditoDaCompensare,
-    totaleF24Giugno: totaliF24.giugno,
-    totaleF24Novembre: totaliF24.novembre,
-    warnings,
-  };
-}
-
-export function computeMultiYear(input: MultiYearInput): MultiYearResult {
-  const results: FiscalYearResult[] = [];
-
-  let contributiPrev = 0;
-  let impostePrev = 0;
-
-  for (const anno of input.anni) {
-    const fy: FiscalYearInput = {
-      year: anno.year,
-      fatturato: anno.fatturato,
-      contributiVersatiPrecedente: contributiPrev,
-      imposteVersatePrecedente: impostePrev,
-      ccIAA: input.ccIAA,
+  it("Anno 0 – calcolo di base", () => {
+    const input: FiscalYearInput = {
+      year: 2025,
+      fatturato: 60000,
+      contributiVersatiPrecedente: 0,
+      imposteVersatePrecedente: 0,
+      ccIAA: 60,
+      rivalsaCassaTotale: undefined,
     };
 
-    const result = computeFiscalYear(input.profile, fy);
-    results.push(result);
+    const result = computeFiscalYear(profile, input);
 
-    contributiPrev =
-      result.contributiInpsPercentuali +
-      result.primoAccontoContributi +
-      result.secondoAccontoContributi;
+    const coeff = TAX_CONFIG.coeffProfessionista;
+    const redditoLordoExp = input.fatturato * coeff;
+    const contributiPercExp =
+      redditoLordoExp * TAX_CONFIG.aliquotaPercGestioneSeparata;
+    const redditoNettoExp = redditoLordoExp - contributiPercExp;
+    const impostaLordaExp =
+      redditoNettoExp * profile.aliquotaImpostaSostitutiva;
 
-    impostePrev =
-      result.impostaSostitutivaLorda +
-      result.primoAccontoImposta +
-      result.secondoAccontoImposta;
-  }
+    const saldoImpostaExp = impostaLordaExp - 0;
+    const primoAccImpostaExp = saldoImpostaExp * TAX_CONFIG.accontoPercentuale;
+    const secondoAccImpostaExp = primoAccImpostaExp;
 
-  return { anni: results };
-}
+    const primoAccContrExp =
+      contributiPercExp * TAX_CONFIG.accontoPercentuale;
+    const secondoAccContrExp = primoAccContrExp;
+
+    const f24GiugnoExp =
+      saldoImpostaExp +
+      contributiPercExp +
+      primoAccImpostaExp +
+      primoAccContrExp +
+      input.ccIAA;
+
+    const f24NovembreExp = secondoAccImpostaExp + secondoAccContrExp;
+
+    expect(round2(result.redditoImponibileLordo)).toBeCloseTo(
+      round2(redditoLordoExp),
+      2
+    );
+    expect(round2(result.redditoImponibileNetto)).toBeCloseTo(
+      round2(redditoNettoExp),
+      2
+    );
+
+    expect(round2(result.contributiInpsFissi)).toBeCloseTo(0, 2);
+    expect(round2(result.contributiInpsPercentuali)).toBeCloseTo(
+      round2(contributiPercExp),
+      2
+    );
+
+    expect(round2(result.impostaSostitutivaLorda)).toBeCloseTo(
+      round2(impostaLordaExp),
+      2
+    );
+    expect(round2(result.saldoImpostaSostitutiva)).toBeCloseTo(
+      round2(saldoImpostaExp),
+      2
+    );
+
+    expect(round2(result.primoAccontoImposta)).toBeCloseTo(
+      round2(primoAccImpostaExp),
+      2
+    );
+    expect(round2(result.secondoAccontoImposta)).toBeCloseTo(
+      round2(secondoAccImpostaExp),
+      2
+    );
+
+    expect(round2(result.primoAccontoContributi)).toBeCloseTo(
+      round2(primoAccContrExp),
+      2
+    );
+    expect(round2(result.secondoAccontoContributi)).toBeCloseTo(
+      round2(secondoAccContrExp),
+      2
+    );
+
+    expect(round2(result.totaleF24Giugno)).toBeCloseTo(
+      round2(f24GiugnoExp),
+      2
+    );
+    expect(round2(result.totaleF24Novembre)).toBeCloseTo(
+      round2(f24NovembreExp),
+      2
+    );
+  });
+
+  it("Anno 1 – uso corretto di contributi e imposte dell'anno precedente", () => {
+    const year0: FiscalYearInput = {
+      year: 2025,
+      fatturato: 60000,
+      contributiVersatiPrecedente: 0,
+      imposteVersatePrecedente: 0,
+      ccIAA: 60,
+      rivalsaCassaTotale: undefined,
+    };
+    const res0 = computeFiscalYear(profile, year0);
+
+    const contributiPrev =
+      res0.contributiInpsPercentuali +
+      res0.primoAccontoContributi +
+      res0.secondoAccontoContributi;
+
+    const impostePrev =
+      res0.impostaSostitutivaLorda +
+      res0.primoAccontoImposta +
+      res0.secondoAccontoImposta;
+
+    const year1: FiscalYearInput = {
+      year: 2026,
+      fatturato: 65000,
+      contributiVersatiPrecedente: contributiPrev,
+      imposteVersatePrecedente: impostePrev,
+      ccIAA: 60,
+      rivalsaCassaTotale: undefined,
+    };
+
+    const result = computeFiscalYear(profile, year1);
+
+    const redditoLordo1 = year1.fatturato * TAX_CONFIG.coeffProfessionista;
+    const redditoNetto1 = redditoLordo1 - contributiPrev;
+    const impostaLorda1 = redditoNetto1 * profile.aliquotaImpostaSostitutiva;
+    const saldoImposta1 = impostaLorda1 - impostePrev;
+
+    expect(round2(result.redditoImponibileLordo)).toBeCloseTo(
+      round2(redditoLordo1),
+      2
+    );
+    expect(round2(result.redditoImponibileNetto)).toBeCloseTo(
+      round2(redditoNetto1),
+      2
+    );
+    expect(round2(result.saldoImpostaSostitutiva)).toBeCloseTo(
+      round2(saldoImposta1),
+      2
+    );
+    expect(round2(result.creditoDaCompensare ?? 0)).toBeCloseTo(
+      round2(Math.max(0, -saldoImposta1)),
+      2
+    );
+  });
+});
+
+describe("Artigiano – Gestione Artigiani/Commercianti", () => {
+  const profile: UserTaxProfile = {
+    category: "ARTIGIANO",
+    previdenza: "ARTIGIANI_COMMERCIANTI",
+    hasCassaProfessionale: false,
+    aliquotaImpostaSostitutiva: 0.05,
+  };
+
+  it("Anno 0 – contributi fissi + percentuali", () => {
+    const input: FiscalYearInput = {
+      year: 2025,
+      fatturato: 40000,
+      contributiVersatiPrecedente: 0,
+      imposteVersatePrecedente: 0,
+      ccIAA: 60,
+      rivalsaCassaTotale: undefined,
+    };
+
+    const result = computeFiscalYear(profile, input);
+
+    const coeff = TAX_CONFIG.coeffArtigiano;
+    const redditoLordoExp = input.fatturato * coeff;
+
+    const fissi = TAX_CONFIG.contributiFissiAnnuiArtigiani;
+    const eccedenza = Math.max(
+      0,
+      redditoLordoExp - TAX_CONFIG.sogliaContributiPercArtigiani
+    );
+    const perc = eccedenza * TAX_CONFIG.aliquotaPercArtigiani;
+
+    const redditoNettoExp = redditoLordoExp - fissi - perc;
+    const impostaLordaExp =
+      redditoNettoExp * profile.aliquotaImpostaSostitutiva;
+
+    expect(round2(result.redditoImponibileLordo)).toBeCloseTo(
+      round2(redditoLordoExp),
+      2
+    );
+    expect(round2(result.contributiInpsFissi)).toBeCloseTo(round2(fissi), 2);
+    expect(round2(result.contributiInpsPercentuali)).toBeCloseTo(
+      round2(perc),
+      2
+    );
+    expect(round2(result.redditoImponibileNetto)).toBeCloseTo(
+      round2(redditoNettoExp),
+      2
+    );
+    expect(round2(result.impostaSostitutivaLorda)).toBeCloseTo(
+      round2(impostaLordaExp),
+      2
+    );
+  });
+
+  it("Anno 1 – utilizzo contributi ed imposte precedente", () => {
+    const year0: FiscalYearInput = {
+      year: 2025,
+      fatturato: 40000,
+      contributiVersatiPrecedente: 0,
+      imposteVersatePrecedente: 0,
+      ccIAA: 60,
+      rivalsaCassaTotale: undefined,
+    };
+    const res0 = computeFiscalYear(profile, year0);
+
+    const contributiPrev =
+      res0.contributiInpsPercentuali +
+      res0.primoAccontoContributi +
+      res0.secondoAccontoContributi;
+
+    const impostePrev =
+      res0.impostaSostitutivaLorda +
+      res0.primoAccontoImposta +
+      res0.secondoAccontoImposta;
+
+    const year1: FiscalYearInput = {
+      year: 2026,
+      fatturato: 45000,
+      contributiVersatiPrecedente: contributiPrev,
+      imposteVersatePrecedente: impostePrev,
+      ccIAA: 60,
+      rivalsaCassaTotale: undefined,
+    };
+
+    const result = computeFiscalYear(profile, year1);
+
+    const redditoLordo1 = year1.fatturato * TAX_CONFIG.coeffArtigiano;
+    const redditoNetto1 = redditoLordo1 - contributiPrev;
+    const impostaLorda1 = redditoNetto1 * profile.aliquotaImpostaSostitutiva;
+    const saldoImposta1 = impostaLorda1 - impostePrev;
+
+    expect(round2(result.redditoImponibileLordo)).toBeCloseTo(
+      round2(redditoLordo1),
+      2
+    );
+    expect(round2(result.redditoImponibileNetto)).toBeCloseTo(
+      round2(redditoNetto1),
+      2
+    );
+    expect(round2(result.saldoImpostaSostitutiva)).toBeCloseTo(
+      round2(saldoImposta1),
+      2
+    );
+  });
+});
+
+describe("Commerciante – Gestione Artigiani/Commercianti", () => {
+  const profile: UserTaxProfile = {
+    category: "COMMERCIANTE",
+    previdenza: "ARTIGIANI_COMMERCIANTI",
+    hasCassaProfessionale: false,
+    aliquotaImpostaSostitutiva: 0.15,
+  };
+
+  it("Anno 0 – contributi fissi + percentuali", () => {
+    const input: FiscalYearInput = {
+      year: 2025,
+      fatturato: 50000,
+      contributiVersatiPrecedente: 0,
+      imposteVersatePrecedente: 0,
+      ccIAA: 60,
+      rivalsaCassaTotale: undefined,
+    };
+
+    const result = computeFiscalYear(profile, input);
+
+    const coeff = TAX_CONFIG.coeffCommerciante;
+    const redditoLordoExp = input.fatturato * coeff;
+
+    const fissi = TAX_CONFIG.contributiFissiAnnuiCommercianti;
+    const eccedenza = Math.max(
+      0,
+      redditoLordoExp - TAX_CONFIG.sogliaContributiPercCommercianti
+    );
+    const perc = eccedenza * TAX_CONFIG.aliquotaPercCommercianti;
+
+    const redditoNettoExp = redditoLordoExp - fissi - perc;
+    const impostaLordaExp =
+      redditoNettoExp * profile.aliquotaImpostaSostitutiva;
+
+    expect(round2(result.redditoImponibileLordo)).toBeCloseTo(
+      round2(redditoLordoExp),
+      2
+    );
+    expect(round2(result.contributiInpsFissi)).toBeCloseTo(round2(fissi), 2);
+    expect(round2(result.contributiInpsPercentuali)).toBeCloseTo(
+      round2(perc),
+      2
+    );
+    expect(round2(result.redditoImponibileNetto)).toBeCloseTo(
+      round2(redditoNettoExp),
+      2
+    );
+    expect(round2(result.impostaSostitutivaLorda)).toBeCloseTo(
+      round2(impostaLordaExp),
+      2
+    );
+  });
+
+  it("Anno 1 – utilizzo contributi ed imposte precedente", () => {
+    const year0: FiscalYearInput = {
+      year: 2025,
+      fatturato: 50000,
+      contributiVersatiPrecedente: 0,
+      imposteVersatePrecedente: 0,
+      ccIAA: 60,
+      rivalsaCassaTotale: undefined,
+    };
+    const res0 = computeFiscalYear(profile, year0);
+
+    const contributiPrev =
+      res0.contributiInpsPercentuali +
+      res0.primoAccontoContributi +
+      res0.secondoAccontoContributi;
+
+    const impostePrev =
+      res0.impostaSostitutivaLorda +
+      res0.primoAccontoImposta +
+      res0.secondoAccontoImposta;
+
+    const year1: FiscalYearInput = {
+      year: 2026,
+      fatturato: 52000,
+      contributiVersatiPrecedente: contributiPrev,
+      imposteVersatePrecedente: impostePrev,
+      ccIAA: 60,
+      rivalsaCassaTotale: undefined,
+    };
+
+    const result = computeFiscalYear(profile, year1);
+
+    const redditoLordo1 = year1.fatturato * TAX_CONFIG.coeffCommerciante;
+    const redditoNetto1 = redditoLordo1 - contributiPrev;
+    const impostaLorda1 = redditoNetto1 * profile.aliquotaImpostaSostitutiva;
+    const saldoImposta1 = impostaLorda1 - impostePrev;
+
+    expect(round2(result.redditoImponibileLordo)).toBeCloseTo(
+      round2(redditoLordo1),
+      2
+    );
+    expect(round2(result.redditoImponibileNetto)).toBeCloseTo(
+      round2(redditoNetto1),
+      2
+    );
+    expect(round2(result.saldoImpostaSostitutiva)).toBeCloseTo(
+      round2(saldoImposta1),
+      2
+    );
+  });
+});
+
+describe("Multi-anno – integrazione complessiva", () => {
+  it("computeMultiYear propaga correttamente contributi e imposte", () => {
+    const profile: UserTaxProfile = {
+      category: "PROFESSIONISTA",
+      previdenza: "GESTIONE_SEPARATA",
+      hasCassaProfessionale: false,
+      aliquotaImpostaSostitutiva: 0.05,
+    };
+
+    const input: MultiYearInput = {
+      profile,
+      ccIAA: 60,
+      anni: [
+        { year: 2025, fatturato: 60000 },
+        { year: 2026, fatturato: 65000 },
+      ],
+    };
+
+    const res = computeMultiYear(input);
+
+    expect(res.anni.length).toBe(2);
+
+    // Verifica base: il secondo anno deve usare come "precedenti"
+    // i valori derivati dal primo anno (già gestito dal motore).
+    const year0 = res.anni[0];
+    const year1 = res.anni[1];
+
+    expect(year0.year).toBe(2025);
+    expect(year1.year).toBe(2026);
+
+    // Il reddito netto anno 1 deve essere inferiore al reddito lordo
+    // di almeno i contributi versati l'anno precedente.
+    expect(year1.redditoImponibileNetto).toBeLessThan(
+      year1.redditoImponibileLordo
+    );
+  });
+});

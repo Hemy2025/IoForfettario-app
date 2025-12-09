@@ -1,11 +1,11 @@
 {
   "name": "ioforfettario-backend",
   "version": "1.0.0",
-  "description": "Backend tax engine for IoForfettario (regime forfettario)",
-  "main": "dist/server.js",
+  "description": "Backend tax engine and mock APIs for IoForfettario",
+  "main": "src/server.ts",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "ts-node src/server.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "test": "jest --runInBand"
   },
@@ -14,6 +14,7 @@
     "express": "^4.19.2"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.10.6",

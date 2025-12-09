@@ -107,7 +107,7 @@ describe("Professionista – Gestione separata", () => {
       2
     );
     expect(round2(result.secondoAccontoContributi)).toBeCloseTo(
-      round2(secondAccContrExp),
+      round2(secondoAccContrExp),
       2
     );
 

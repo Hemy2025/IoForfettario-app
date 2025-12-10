@@ -86,6 +86,33 @@ export interface MultiYearResult {
   anni: FiscalYearResult[];
 }
 
+/**
+ * Contesto annuale per il calcolo dell’accantonamento per singola fattura.
+ */
+export interface YearTaxContext {
+  profile: UserTaxProfile;
+  year: number;
+  fatturatoYTD: number;
+  contributiVersatiPrecedente: number;
+  imposteVersatePrecedente: number;
+  ccIAA: number;
+}
+
+/**
+ * Risultato del calcolo di accantonamento per singola fattura.
+ */
+export interface InvoiceAccantonamentoResult {
+  accantonamentoTotale: number;
+  accantonamentoGiugno: number;
+  accantonamentoNovembre: number;
+  percentualeSuFattura: number;
+
+  fatturatoYtdPrima: number;
+  fatturatoYtdDopo: number;
+  residuoFatturabile: number;
+  haSuperatoSoglia: boolean;
+}
+
 /* --------------------------------------------------------------- */
 /*  CONFIGURAZIONE PARAMETRI                                       */
 /* --------------------------------------------------------------- */
@@ -113,6 +140,9 @@ export const TAX_CONFIG = {
 
   // acconti: 50% + 50%
   accontoPercentuale: 0.5,
+
+  // tetto massimo di fatturato per regime forfettario
+  tettoForfettarioAnnuale: 85000,
 };
 
 /* --------------------------------------------------------------- */
@@ -374,4 +404,67 @@ export function computeMultiYear(input: MultiYearInput): MultiYearResult {
   }
 
   return { anni: results };
+}
+
+/* --------------------------------------------------------------- */
+/*  FUNZIONE PER SINGOLA FATTURA – ACCANTONAMENTO + TETTO 85K      */
+/* --------------------------------------------------------------- */
+
+/**
+ * Calcola l'accantonamento consigliato per una singola fattura
+ * confrontando la situazione "prima" e "dopo" la fattura e
+ * restituendo anche il residuo rispetto al tetto forfettario.
+ */
+export function computeAccantonamentoPerFattura(
+  ctx: YearTaxContext,
+  importoFattura: number
+): InvoiceAccantonamentoResult {
+  const fatturatoYtdPrima = ctx.fatturatoYTD;
+  const fatturatoYtdDopo = ctx.fatturatoYTD + importoFattura;
+
+  const beforeInput: FiscalYearInput = {
+    year: ctx.year,
+    fatturato: fatturatoYtdPrima,
+    contributiVersatiPrecedente: ctx.contributiVersatiPrecedente,
+    imposteVersatePrecedente: ctx.imposteVersatePrecedente,
+    ccIAA: ctx.ccIAA,
+  };
+
+  const afterInput: FiscalYearInput = {
+    ...beforeInput,
+    fatturato: fatturatoYtdDopo,
+  };
+
+  const resBefore = computeFiscalYear(ctx.profile, beforeInput);
+  const resAfter = computeFiscalYear(ctx.profile, afterInput);
+
+  let deltaGiugno =
+    resAfter.totaleF24Giugno - resBefore.totaleF24Giugno;
+  let deltaNovembre =
+    resAfter.totaleF24Novembre - resBefore.totaleF24Novembre;
+
+  // Mai suggerire accantonamenti negativi
+  if (deltaGiugno < 0) deltaGiugno = 0;
+  if (deltaNovembre < 0) deltaNovembre = 0;
+
+  const accantonamentoTotale = deltaGiugno + deltaNovembre;
+
+  const residuoFatturabile =
+    TAX_CONFIG.tettoForfettarioAnnuale - fatturatoYtdDopo;
+  const haSuperatoSoglia = fatturatoYtdDopo > TAX_CONFIG.tettoForfettarioAnnuale;
+
+  const percentualeSuFattura =
+    importoFattura > 0 ? accantonamentoTotale / importoFattura : 0;
+
+  return {
+    accantonamentoTotale,
+    accantonamentoGiugno: deltaGiugno,
+    accantonamentoNovembre: deltaNovembre,
+    percentualeSuFattura,
+
+    fatturatoYtdPrima,
+    fatturatoYtdDopo,
+    residuoFatturabile,
+    haSuperatoSoglia,
+  };
 }

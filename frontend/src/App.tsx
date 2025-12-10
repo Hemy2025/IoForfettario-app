@@ -1,27 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Onboarding from "./Onboarding";
+import type { StoredUserProfile } from "./types/taxProfile";
 
-type ForfettarioCategory = "PROFESSIONISTA" | "ARTIGIANO" | "COMMERCIANTE";
-
-type PrevidenzaTipo =
-  | "GESTIONE_SEPARATA"
-  | "ARTIGIANI_COMMERCIANTI"
-  | "CASSA_PROFESSIONALE";
-
-interface UserTaxProfile {
-  category: ForfettarioCategory;
-  previdenza: PrevidenzaTipo;
-  hasCassaProfessionale: boolean;
-  cassaAliquotaRivalsa?: number;
-  aliquotaImpostaSostitutiva: number;
-}
-
-interface FiscalYearInput {
-  year: number;
-  fatturato: number;
-  contributiVersatiPrecedente: number;
-  imposteVersatePrecedente: number;
-  ccIAA: number;
-}
+const BACKEND_URL = "http://localhost:3001";
 
 interface FiscalYearResult {
   year: number;
@@ -36,636 +17,296 @@ interface FiscalYearResult {
   secondoAccontoImposta: number;
   primoAccontoContributi: number;
   secondoAccontoContributi: number;
-  totaleF24Giugno: number;
-  totaleF24Novembre: number;
   importoRivalsaCassa?: number;
   creditoDaCompensare?: number;
+  totaleF24Giugno: number;
+  totaleF24Novembre: number;
   warnings: string[];
 }
 
+const defaultProfile: StoredUserProfile = {
+  category: "PROFESSIONISTA",
+  previdenza: "GESTIONE_SEPARATA",
+  hasCassaProfessionale: false,
+  aliquotaImpostaSostitutiva: 0.05,
+};
+
+function formatCurrency(value: number | undefined | null): string {
+  if (value == null || isNaN(value)) return "0,00 €";
+  return value.toLocaleString("it-IT", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 2,
+  });
+}
+
 function App() {
-  // Profilo base: professionista, gestione separata, 5%
-  const [category, setCategory] =
-    useState<ForfettarioCategory>("PROFESSIONISTA");
-  const [previdenza, setPrevidenza] =
-    useState<PrevidenzaTipo>("GESTIONE_SEPARATA");
-  const [hasCassaProfessionale, setHasCassaProfessionale] = useState(false);
-  const [aliquotaImposta, setAliquotaImposta] = useState(0.05);
+  const [profile, setProfile] = useState<StoredUserProfile>(defaultProfile);
 
-  // Dati anno
-  const [year, setYear] = useState(2025);
-  const [fatturato, setFatturato] = useState(60000);
-  const [contribPrecedenti, setContribPrecedenti] = useState(0);
-  const [impostePrecedenti, setImpostePrecedenti] = useState(0);
-  const [ccIAA, setCcIAA] = useState(60);
+  const [year, setYear] = useState<number>(2025);
+  const [fatturato, setFatturato] = useState<number>(60000);
+  const [contributiPrev, setContributiPrev] = useState<number>(0);
+  const [impostePrev, setImpostePrev] = useState<number>(0);
+  const [cciaa, setCciaa] = useState<number>(60);
 
-  // Stato UI
-  const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<FiscalYearResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  function formatCurrency(v?: number) {
-    if (v === undefined || Number.isNaN(v)) return "-";
-    return v.toLocaleString("it-IT", {
-      style: "currency",
-      currency: "EUR",
-      maximumFractionDigits: 2,
-    });
-  }
+  // Carica profilo salvato
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("ioforfettario.profile");
+      if (raw) {
+        const parsed = JSON.parse(raw) as StoredUserProfile;
+        setProfile(parsed);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  const handleProfileSave = (p: StoredUserProfile) => {
+    setProfile(p);
+    try {
+      localStorage.setItem("ioforfettario.profile", JSON.stringify(p));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleCalculate = async () => {
     setLoading(true);
-    setError(null);
+    setErrorMsg(null);
     setResult(null);
 
-    const profile: UserTaxProfile = {
-      category,
-      previdenza,
-      hasCassaProfessionale,
-      aliquotaImpostaSostitutiva: aliquotaImposta,
-      cassaAliquotaRivalsa: hasCassaProfessionale ? 0.04 : undefined,
-    };
-
-    const yearInput: FiscalYearInput = {
-      year,
-      fatturato,
-      contributiVersatiPrecedente: contribPrecedenti,
-      imposteVersatePrecedente: impostePrecedenti,
-      ccIAA,
-    };
-
     try {
-      const res = await fetch("/api/tax/calc-year", {
+      const body = {
+        profile,
+        yearInput: {
+          year,
+          fatturato,
+          contributiVersatiPrecedente: contributiPrev,
+          imposteVersatePrecedente: impostePrev,
+          ccIAA: cciaa,
+        },
+      };
+
+      const res = await fetch(`${BACKEND_URL}/api/fiscal/year`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile, yearInput }),
+        body: JSON.stringify(body),
       });
 
-      const data = await res.json();
       if (!res.ok) {
-        throw new Error(data?.error || "Errore dal server");
+        throw new Error(`Errore HTTP ${res.status}`);
       }
-      setResult(data.result);
-    } catch (e: any) {
-      console.error(e);
-      setError(e.message || "Errore imprevisto");
+
+      const data = (await res.json()) as FiscalYearResult;
+      setResult(data);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(
+        "Si è verificato un errore nel calcolo. Verifica che il backend sia avviato sulla porta 3001."
+      );
     } finally {
       setLoading(false);
     }
-  }
-
-  const totalContributi = result
-    ? result.contributiInpsFissi + result.contributiInpsPercentuali
-    : 0;
+  };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        margin: 0,
-        background: "#0f172a",
-        color: "#e5e7eb",
-        fontFamily:
-          "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-      }}
-    >
-      {/* Header */}
-      <header
-        style={{
-          borderBottom: "1px solid rgba(148,163,184,0.3)",
-          padding: "12px 24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-        }}
-      >
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 600 }}>IoForfettario</div>
-          <div style={{ fontSize: 12, color: "#9ca3af" }}>
-            MVP – simulatore fiscale collegato al motore reale
+    <div className="app-root">
+      <div className="app-shell">
+        {/* HEADER */}
+        <header className="app-header">
+          <div>
+            <div className="app-title">IoForfettario</div>
+            <div className="app-subtitle">
+              MVP – simulatore fiscale collegato al motore a regole validato.
+            </div>
           </div>
-        </div>
-        <div
-          style={{
-            fontSize: 12,
-            color: "#9ca3af",
-            padding: "6px 10px",
-            borderRadius: 999,
-            border: "1px solid rgba(148,163,184,0.4)",
-          }}
-        >
-          Workspace: <strong>Demo pre-lancio</strong>
-        </div>
-      </header>
+          <div className="app-badge">Workspace: Demo pre-lancio</div>
+        </header>
 
-      {/* Corpo pagina */}
-      <main
-        style={{
-          padding: 24,
-          maxWidth: 1200,
-          margin: "0 auto",
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
-          gap: 24,
-        }}
-      >
-        {/* Colonna sinistra: form */}
-        <section
-          style={{
-            background: "rgba(15,23,42,0.95)",
-            borderRadius: 18,
-            border: "1px solid rgba(148,163,184,0.35)",
-            padding: 20,
-            boxShadow: "0 18px 45px rgba(15,23,42,0.75)",
-          }}
-        >
-          <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 4 }}>
-            Parametri simulazione
-          </h1>
-          <p style={{ fontSize: 13, color: "#9ca3af", marginBottom: 16 }}>
-            Imposta il tuo profilo e i dati dell&apos;anno. Il calcolo è
-            allineato ai fogli Excel usati internamente.
-          </p>
+        <div className="app-grid">
+          {/* COLONNA SINISTRA – ONBOARDING + FORM ANNO */}
+          <section className="card">
+            <div className="onboarding-wrap">
+              <div className="onboarding-title">
+                Profilo fiscale (onboarding rapido)
+              </div>
+              <Onboarding profile={profile} onProfileChange={handleProfileSave} />
+            </div>
 
-          <form
-            onSubmit={handleSubmit}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gap: 12,
-              fontSize: 13,
-            }}
-          >
-            {/* Sezione profilo */}
-            <div
-              style={{
-                gridColumn: "1 / -1",
-                fontSize: 11,
-                textTransform: "uppercase",
-                letterSpacing: 0.04,
-                color: "#9ca3af",
-                marginTop: 4,
-              }}
+            <div className="card-header">
+              <div>
+                <div className="card-title">Parametri simulazione anno fiscale</div>
+                <div className="card-caption">
+                  Imposta i dati contabili. Il motore fiscale utilizza le stesse
+                  logiche dei fogli Excel interni.
+                </div>
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <div className="form-field">
+                <label className="form-label">Anno</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  value={year}
+                  onChange={(e) => setYear(Number(e.target.value) || 0)}
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-label">Fatturato annuo (€)</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  value={fatturato}
+                  onChange={(e) => setFatturato(Number(e.target.value) || 0)}
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-label">
+                  Contributi versati anno precedente (€)
+                </label>
+                <input
+                  className="form-input"
+                  type="number"
+                  value={contributiPrev}
+                  onChange={(e) => setContributiPrev(Number(e.target.value) || 0)}
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-label">
+                  Imposte versate anno precedente (€)
+                </label>
+                <input
+                  className="form-input"
+                  type="number"
+                  value={impostePrev}
+                  onChange={(e) => setImpostePrev(Number(e.target.value) || 0)}
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-label">CCIAA (quota annua, €)</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  value={cciaa}
+                  onChange={(e) => setCciaa(Number(e.target.value) || 0)}
+                />
+              </div>
+            </div>
+
+            <button
+              className="primary-button"
+              onClick={handleCalculate}
+              disabled={loading}
             >
-              Profilo fiscale
+              {loading
+                ? "Calcolo in corso…"
+                : "Calcola imposte, contributi e F24"}
+            </button>
+
+            {errorMsg && <div className="status-bar">{errorMsg}</div>}
+          </section>
+
+          {/* COLONNA DESTRA – RISULTATI */}
+          <section className="card">
+            <div className="card-header">
+              <div>
+                <div className="card-title">Risultato simulazione</div>
+                <div className="card-caption">
+                  I dati provengono direttamente dal motore fiscale validato
+                  (stessa logica degli Excel interni).
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label style={{ display: "block", marginBottom: 4 }}>
-                Categoria
-              </label>
-              <select
-                value={category}
-                onChange={(e) =>
-                  setCategory(e.target.value as ForfettarioCategory)
-                }
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  borderRadius: 10,
-                  border: "1px solid #4b5563",
-                  background: "#020617",
-                  color: "#e5e7eb",
-                }}
-              >
-                <option value="PROFESSIONISTA">Professionista</option>
-                <option value="ARTIGIANO">Artigiano</option>
-                <option value="COMMERCIANTE">Commerciante</option>
-              </select>
-            </div>
+            {result ? (
+              <>
+                <div className="result-grid">
+                  <div className="result-pill">
+                    <div className="result-label">
+                      Reddito imponibile lordo / netto
+                    </div>
+                    <div className="result-value">
+                      Lordo: {formatCurrency(result.redditoImponibileLordo)}
+                    </div>
+                    <div className="result-subvalue">
+                      Netto: {formatCurrency(result.redditoImponibileNetto)}
+                    </div>
+                  </div>
 
-            <div>
-              <label style={{ display: "block", marginBottom: 4 }}>
-                Previdenza
-              </label>
-              <select
-                value={previdenza}
-                onChange={(e) =>
-                  setPrevidenza(e.target.value as PrevidenzaTipo)
-                }
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  borderRadius: 10,
-                  border: "1px solid #4b5563",
-                  background: "#020617",
-                  color: "#e5e7eb",
-                }}
-              >
-                <option value="GESTIONE_SEPARATA">Gestione separata</option>
-                <option value="ARTIGIANI_COMMERCIANTI">
-                  Artigiani / Commercianti
-                </option>
-                <option value="CASSA_PROFESSIONALE">Cassa professionale</option>
-              </select>
-            </div>
+                  <div className="result-pill">
+                    <div className="result-label">Contributi INPS totali</div>
+                    <div className="result-value">
+                      {formatCurrency(
+                        result.contributiInpsFissi +
+                          result.contributiInpsPercentuali
+                      )}
+                    </div>
+                    <div className="result-subvalue">
+                      Fissi: {formatCurrency(result.contributiInpsFissi)} · %
+                      : {formatCurrency(result.contributiInpsPercentuali)}
+                    </div>
+                  </div>
 
-            <div>
-              <label style={{ display: "block", marginBottom: 4 }}>
-                Aliquota imposta
-              </label>
-              <select
-                value={aliquotaImposta}
-                onChange={(e) =>
-                  setAliquotaImposta(parseFloat(e.target.value))
-                }
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  borderRadius: 10,
-                  border: "1px solid #4b5563",
-                  background: "#020617",
-                  color: "#e5e7eb",
-                }}
-              >
-                <option value={0.05}>5% (start-up/primi 5 anni)</option>
-                <option value={0.15}>15% (regime ordinario)</option>
-              </select>
-            </div>
+                  <div className="result-pill">
+                    <div className="result-label">Imposta sostitutiva lorda</div>
+                    <div className="result-value">
+                      {formatCurrency(result.impostaSostitutivaLorda)}
+                    </div>
+                    <div className="result-subvalue">
+                      Saldo: {formatCurrency(result.saldoImpostaSostitutiva)}
+                    </div>
+                  </div>
 
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
-              <input
-                id="cassa"
-                type="checkbox"
-                checked={hasCassaProfessionale}
-                onChange={(e) => setHasCassaProfessionale(e.target.checked)}
-              />
-              <label htmlFor="cassa" style={{ fontSize: 12 }}>
-                Applico rivalsa cassa (4%)
-              </label>
-            </div>
+                  <div className="result-pill highlight-green">
+                    <div className="result-label">Totale F24 – giugno</div>
+                    <div className="result-value">
+                      {formatCurrency(result.totaleF24Giugno)}
+                    </div>
+                    <div className="result-subvalue">
+                      Include saldo + 1° acconti + CCIAA
+                    </div>
+                  </div>
 
-            {/* Sezione anno */}
-            <div
-              style={{
-                gridColumn: "1 / -1",
-                fontSize: 11,
-                textTransform: "uppercase",
-                letterSpacing: 0.04,
-                color: "#9ca3af",
-                marginTop: 8,
-              }}
-            >
-              Dati anno fiscale
-            </div>
+                  <div className="result-pill highlight-amber">
+                    <div className="result-label">Totale F24 – novembre</div>
+                    <div className="result-value">
+                      {formatCurrency(result.totaleF24Novembre)}
+                    </div>
+                    <div className="result-subvalue">
+                      Secondi acconti imposta + contributi
+                    </div>
+                  </div>
+                </div>
 
-            <div>
-              <label style={{ display: "block", marginBottom: 4 }}>Anno</label>
-              <input
-                type="number"
-                value={year}
-                onChange={(e) =>
-                  setYear(parseInt(e.target.value || "0", 10))
-                }
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  borderRadius: 10,
-                  border: "1px solid #4b5563",
-                  background: "#020617",
-                  color: "#e5e7eb",
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: "block", marginBottom: 4 }}>
-                Fatturato annuo (€)
-              </label>
-              <input
-                type="number"
-                value={fatturato}
-                onChange={(e) =>
-                  setFatturato(parseFloat(e.target.value || "0"))
-                }
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  borderRadius: 10,
-                  border: "1px solid #4b5563",
-                  background: "#020617",
-                  color: "#e5e7eb",
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: "block", marginBottom: 4 }}>
-                Contributi versati anno precedente
-              </label>
-              <input
-                type="number"
-                value={contribPrecedenti}
-                onChange={(e) =>
-                  setContribPrecedenti(parseFloat(e.target.value || "0"))
-                }
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  borderRadius: 10,
-                  border: "1px solid #4b5563",
-                  background: "#020617",
-                  color: "#e5e7eb",
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: "block", marginBottom: 4 }}>
-                Imposte versate anno precedente
-              </label>
-              <input
-                type="number"
-                value={impostePrecedenti}
-                onChange={(e) =>
-                  setImpostePrecedenti(parseFloat(e.target.value || "0"))
-                }
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  borderRadius: 10,
-                  border: "1px solid #4b5563",
-                  background: "#020617",
-                  color: "#e5e7eb",
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: "block", marginBottom: 4 }}>
-                CCIAA (quota annua)
-              </label>
-              <input
-                type="number"
-                value={ccIAA}
-                onChange={(e) =>
-                  setCcIAA(parseFloat(e.target.value || "0"))
-                }
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  borderRadius: 10,
-                  border: "1px solid #4b5563",
-                  background: "#020617",
-                  color: "#e5e7eb",
-                }}
-              />
-            </div>
-
-            <div style={{ gridColumn: "1 / -1", marginTop: 10 }}>
-              <button
-                type="submit"
-                disabled={loading}
-                style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  borderRadius: 999,
-                  border: "none",
-                  background: loading
-                    ? "rgba(59,130,246,0.6)"
-                    : "linear-gradient(135deg,#4f46e5,#06b6d4)",
-                  color: "#f9fafb",
-                  fontWeight: 600,
-                  fontSize: 14,
-                  cursor: loading ? "default" : "pointer",
-                }}
-              >
-                {loading
-                  ? "Calcolo in corso..."
-                  : "Calcola imposte, contributi e F24"}
-              </button>
-            </div>
-
-            {error && (
-              <div
-                style={{
-                  gridColumn: "1 / -1",
-                  marginTop: 8,
-                  padding: "8px 10px",
-                  borderRadius: 10,
-                  background: "rgba(248,113,113,0.1)",
-                  border: "1px solid rgba(248,113,113,0.6)",
-                  color: "#fecaca",
-                  fontSize: 12,
-                }}
-              >
-                Errore: {error}
+                <div className="result-info">
+                  Anno fiscale simulato: <strong>{result.year}</strong>. Eventuali
+                  messaggi dal motore:{" "}
+                  {result.warnings.length
+                    ? result.warnings.join(" · ")
+                    : "nessun warning rilevante."}
+                </div>
+              </>
+            ) : (
+              <div className="result-info">
+                Inserisci il profilo fiscale, imposta i parametri dell&apos;anno e
+                premi &quot;Calcola imposte, contributi e F24&quot; per vedere il
+                dettaglio dei calcoli.
               </div>
             )}
-          </form>
-        </section>
-
-        {/* Colonna destra: risultati */}
-        <section
-          style={{
-            background: "rgba(15,23,42,0.95)",
-            borderRadius: 18,
-            border: "1px solid rgba(148,163,184,0.35)",
-            padding: 20,
-            boxShadow: "0 18px 45px rgba(15,23,42,0.75)",
-          }}
-        >
-          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>
-            Risultato simulazione
-          </h2>
-          <p style={{ fontSize: 13, color: "#9ca3af", marginBottom: 16 }}>
-            I dati mostrati derivano direttamente dal motore fiscale validato
-            (stessa logica degli Excel interni).
-          </p>
-
-          {!result && !loading && (
-            <p style={{ fontSize: 13, color: "#9ca3af" }}>
-              Compila i parametri a sinistra e avvia il calcolo per vedere qui
-              il dettaglio di reddito, imposta e F24.
-            </p>
-          )}
-
-          {result && (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0,1fr))",
-                gap: 12,
-                fontSize: 13,
-              }}
-            >
-              {/* Reddito */}
-              <div
-                style={{
-                  gridColumn: "1 / -1",
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  background: "rgba(15,23,42,0.9)",
-                  border: "1px solid rgba(55,65,81,0.9)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "#9ca3af",
-                    marginBottom: 2,
-                  }}
-                >
-                  Reddito imponibile lordo / netto
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 20,
-                    flexWrap: "wrap",
-                    alignItems: "baseline",
-                  }}
-                >
-                  <span style={{ fontSize: 16, fontWeight: 600 }}>
-                    Lordo: {formatCurrency(result.redditoImponibileLordo)}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 14,
-                      color: "#9ca3af",
-                    }}
-                  >
-                    Netto: {formatCurrency(result.redditoImponibileNetto)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Contributi totali */}
-              <div
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  background: "rgba(15,23,42,0.9)",
-                  border: "1px solid rgba(55,65,81,0.9)",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "#9ca3af" }}>
-                  Contributi INPS totali
-                </div>
-                <div style={{ fontSize: 16, fontWeight: 600 }}>
-                  {formatCurrency(totalContributi)}
-                </div>
-              </div>
-
-              {/* Imposta sostitutiva */}
-              <div
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  background: "rgba(15,23,42,0.9)",
-                  border: "1px solid rgba(55,65,81,0.9)",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "#9ca3af" }}>
-                  Imposta sostitutiva lorda
-                </div>
-                <div style={{ fontSize: 16, fontWeight: 600 }}>
-                  {formatCurrency(result.impostaSostitutivaLorda)}
-                </div>
-              </div>
-
-              {/* Saldo imposta */}
-              <div
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  background: "rgba(15,23,42,0.9)",
-                  border: "1px solid rgba(55,65,81,0.9)",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "#9ca3af" }}>
-                  Saldo imposta sostitutiva
-                </div>
-                <div style={{ fontSize: 16, fontWeight: 600 }}>
-                  {formatCurrency(result.saldoImpostaSostitutiva)}
-                </div>
-              </div>
-
-              {/* F24 giugno */}
-              <div
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  background: "rgba(22,163,74,0.12)",
-                  border: "1px solid rgba(34,197,94,0.7)",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "#a7f3d0" }}>
-                  Totale F24 – giugno
-                </div>
-                <div style={{ fontSize: 17, fontWeight: 600 }}>
-                  {formatCurrency(result.totaleF24Giugno)}
-                </div>
-              </div>
-
-              {/* F24 novembre */}
-              <div
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  background: "rgba(234,179,8,0.12)",
-                  border: "1px solid rgba(250,204,21,0.8)",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "#facc15" }}>
-                  Totale F24 – novembre
-                </div>
-                <div style={{ fontSize: 17, fontWeight: 600 }}>
-                  {formatCurrency(result.totaleF24Novembre)}
-                </div>
-              </div>
-
-              {/* Credito da compensare */}
-              {result.creditoDaCompensare &&
-                Math.abs(result.creditoDaCompensare) > 0.01 && (
-                  <div
-                    style={{
-                      gridColumn: "1 / -1",
-                      padding: "10px 12px",
-                      borderRadius: 12,
-                      background: "rgba(8,47,73,0.9)",
-                      border: "1px solid rgba(56,189,248,0.8)",
-                    }}
-                  >
-                    <div
-                      style={{ fontSize: 11, color: "#7dd3fc", marginBottom: 2 }}
-                    >
-                      Credito da compensare in F24
-                    </div>
-                    <div style={{ fontSize: 16, fontWeight: 600 }}>
-                      {formatCurrency(result.creditoDaCompensare)}
-                    </div>
-                  </div>
-                )}
-
-              {/* Warnings */}
-              {result.warnings && result.warnings.length > 0 && (
-                <div
-                  style={{
-                    gridColumn: "1 / -1",
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    background: "rgba(15,23,42,0.9)",
-                    border: "1px dashed rgba(148,163,184,0.8)",
-                    fontSize: 12,
-                  }}
-                >
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                    Note del motore fiscale
-                  </div>
-                  <ul style={{ margin: 0, paddingLeft: 18 }}>
-                    {result.warnings.map((w, idx) => (
-                      <li key={idx}>{w}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-      </main>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,68 +1,221 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+/* -------------------------------------------------------
+   TAILWIND IMPORTS (corretti per Vite + PostCSS)
+---------------------------------------------------------*/
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
+/* -------------------------------------------------------
+   RESET DI BASE + DARK MODE
+---------------------------------------------------------*/
+html, body {
   margin: 0;
+  padding: 0;
+  background-color: #0f172a; /* blu notte */
+  color: #e5e7eb;           /* grigio chiaro */
+  font-family: system-ui, sans-serif;
+}
+
+/* Permette alla UI di avere un layout a colonna fluido */
+#root {
+  height: 100%;
+  width: 100%;
   display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  justify-content: center;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+/* -------------------------------------------------------
+   CARD UI
+---------------------------------------------------------*/
+.card {
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 14px;
+  padding: 22px;
+  margin-bottom: 24px;
+  width: 100%;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
+.card-header {
+  margin-bottom: 16px;
+}
+
+.card-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+
+.card-caption {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* -------------------------------------------------------
+   FORM ELEMENTS
+---------------------------------------------------------*/
+.form-field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 14px;
+}
+
+.form-label {
+  font-size: 12px;
+  color: #cbd5e1;
+  margin-bottom: 4px;
+}
+
+.form-input {
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  font-size: 14px;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #38bdf8;
+}
+
+/* -------------------------------------------------------
+   ONBOARDING SELECT + BUTTONS
+---------------------------------------------------------*/
+.onboarding-select {
+  appearance: none;
+  background-color: rgba(15, 23, 42, 0.98);
+  color: #e5e7eb;
+  border-radius: 10px;
+  border: 1px solid rgba(75, 85, 99, 0.9);
+  padding: 9px 12px;
+  padding-right: 26px;
+}
+
+.onboarding-select:focus {
+  outline: none;
+  border-color: #38bdf8;
+}
+
+.onboarding-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #e5e7eb;
+}
+
+.onboarding-checkbox-row input {
+  accent-color: #22c55e;
+}
+
+/* BUTTON SALVA PROFILO */
+.onboarding-save-button {
+  margin-top: 10px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: radial-gradient(circle at top left, #020617 0, #111827 65%);
+  color: #e5e7eb;
+  font-size: 13px;
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  transition: border-color 0.08s ease, transform 0.08s ease,
+    box-shadow 0.08s ease;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+.onboarding-save-button:hover {
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.8);
+}
+
+/* Messaggio “Profilo salvato” */
+.status-bar-inline {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #22c55e;
+}
+
+/* -------------------------------------------------------
+   GRID E LAYOUT
+---------------------------------------------------------*/
+.onboarding-row {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+/* -------------------------------------------------------
+   BOTTONI AZIONE (calcolo annuale, fatture ecc.)
+---------------------------------------------------------*/
+.action-button {
+  background-color: #4ade80;
+  color: #0f172a;
+  border-radius: 10px;
+  padding: 12px;
+  width: 100%;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 15px;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.action-button:hover {
+  background-color: #22c55e;
+  transform: translateY(-1px);
+}
+
+/* -------------------------------------------------------
+   ERRORE BARRA ROSSA
+---------------------------------------------------------*/
+.error-bar {
+  color: #f87171;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+/* -------------------------------------------------------
+   RISULTATO SIMULAZIONE (colonna a destra)
+---------------------------------------------------------*/
+.result-box {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.result-title {
+  font-size: 14px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.result-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+}
+
+/* -------------------------------------------------------
+   AVVISI (per residuo 85k e superamento)
+---------------------------------------------------------*/
+.alert-warning {
+  background-color: #facc15;
+  color: #1f2937;
+  padding: 10px;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+.alert-danger {
+  background-color: #ef4444;
+  color: white;
+  padding: 10px;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-top: 12px;
 }

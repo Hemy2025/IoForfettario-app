@@ -1,52 +1,51 @@
 // backend/src/api/taxRoutes.ts
-// Rotte REST del motore fiscale (regime forfettario)
-
-import { Router, Request, Response } from "express";
+import express, { Application, Request, Response } from "express";
 import {
-  computeFiscalYear,
   computeMultiYear,
-  type UserTaxProfile,
-  type FiscalYearInput,
   type MultiYearInput,
+  TAX_CONFIG,
+  type UserTaxProfile,
 } from "../rules/taxRules";
 
-export const taxRouter = Router();
+export function registerTaxRoutes(app: Application) {
+  const router = express.Router();
 
-// Calcolo singolo anno
-taxRouter.post("/calc-year", (req: Request, res: Response) => {
-  try {
-    const { profile, yearInput } = req.body as {
-      profile: UserTaxProfile;
-      yearInput: FiscalYearInput;
-    };
+  // Config fiscale di base (utile anche per la UI)
+  router.get("/config", (_req: Request, res: Response) => {
+    res.json(TAX_CONFIG);
+  });
 
-    if (!profile || !yearInput) {
-      return res.status(400).json({
-        error: "Missing 'profile' or 'yearInput'.",
-      });
+  // Calcolo fiscale multi-anno
+  const computeHandler = (req: Request, res: Response) => {
+    try {
+      const body = req.body as {
+        profile: UserTaxProfile;
+        ccIAA?: number;
+        anni: Array<{ year: number; fatturato: number }>;
+      };
+
+      if (!body || !body.profile || !body.anni) {
+        return res.status(400).json({
+          error: "Dati mancanti per il calcolo (profile, anni).",
+        });
+      }
+
+      const input: MultiYearInput = {
+        profile: body.profile,
+        ccIAA: body.ccIAA ?? 60,
+        anni: body.anni,
+      };
+
+      const result = computeMultiYear(input);
+      res.json(result);
+    } catch (err) {
+      console.error("Errore /api/tax/compute:", err);
+      res.status(500).json({ error: "Errore interno nel calcolo fiscale." });
     }
+  };
 
-    const result = computeFiscalYear(profile, yearInput);
-    return res.json({ result });
-  } catch (err) {
-    console.error("Error in /api/tax/calc-year:", err);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
+  router.post("/compute", computeHandler);
+  router.post("/calc", computeHandler); // alias, nel dubbio
 
-// Calcolo multi-anno
-taxRouter.post("/calc-multi-year", (req: Request, res: Response) => {
-  try {
-    const { input } = req.body as { input: MultiYearInput };
-
-    if (!input) {
-      return res.status(400).json({ error: "Missing 'input'." });
-    }
-
-    const result = computeMultiYear(input);
-    return res.json({ result });
-  } catch (err) {
-    console.error("Error in /api/tax/calc-multi-year:", err);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
+  app.use("/api/tax", router);
+}

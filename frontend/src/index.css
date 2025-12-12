@@ -1,369 +1,41 @@
-/* ====== Layout base app dark ====== */
+/* frontend/src/index.css */
+
+/* Tailwind v4 */
+@import "tailwindcss";
+@reference "tailwindcss";
+
+/* Base app */
 :root {
   color-scheme: dark;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Inter", sans-serif;
-  background-color: #020617;
-  color: #e5e7eb;
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+html,
+body,
+#root {
+  height: 100%;
 }
 
 body {
   margin: 0;
-  min-height: 100vh;
-  background: radial-gradient(circle at top left, #0f172a 0, #020617 45%, #000 100%);
-  color: inherit;
 }
 
-#root {
-  min-height: 100vh;
-}
-
-/* ====== Shell applicazione ====== */
-.app-root {
-  min-height: 100vh;
-  padding: 24px;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-}
-
-.app-shell {
-  width: 100%;
-  max-width: 1240px;
-  margin: 0 auto;
-}
-
-.app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.app-title {
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.app-subtitle {
-  font-size: 13px;
-  color: #9ca3af;
-}
-
-.app-badge {
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid #1f2937;
-  background: rgba(15, 23, 42, 0.8);
-  font-size: 11px;
-  color: #e5e7eb;
-}
-
-/* ====== Griglia principale ====== */
-.app-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: 18px;
-}
-
-/* ====== Card ====== */
-.card {
-  background: radial-gradient(circle at top left, #0b1120 0, #020617 45%, #020617 100%);
-  border-radius: 18px;
-  border: 1px solid #1f2937;
-  padding: 18px 20px 20px;
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.65);
-}
-
-.card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.card-title {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.card-caption {
-  font-size: 12px;
-  color: #9ca3af;
-}
-
-/* ====== Onboarding blocco ====== */
-.onboarding-wrap {
-  border-bottom: 1px dashed #1f2937;
-  padding-bottom: 14px;
-  margin-bottom: 14px;
-}
-
-/* ====== Form / input / select ====== */
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.form-label {
-  font-size: 12px;
-  color: #9ca3af;
-}
-
-.form-input,
-.form-select {
-  width: 100%;
-  padding: 9px 11px;
-  border-radius: 10px;
-  border: 1px solid #1f2937;
-  background: #020617;
-  color: #e5e7eb;
-  font-size: 13px;
-  outline: none;
-}
-
-.form-input:focus,
-.form-select:focus {
-  border-color: #22c55e;
-  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35);
-}
-
-/* ====== Bottoni ====== */
-.primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 18px;
-  margin-top: 10px;
-  border-radius: 999px;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  color: #f9fafb;
-  background: linear-gradient(90deg, #16a34a, #22c55e);
-  box-shadow: 0 12px 30px rgba(34, 197, 94, 0.35);
-  transition: transform 0.1s ease, box-shadow 0.1s ease,
-    background 0.2s ease, filter 0.15s ease;
-}
-
-.primary-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 18px 40px rgba(34, 197, 94, 0.45);
-  filter: brightness(1.05);
-}
-
-.primary-button:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: 0 10px 25px rgba(34, 197, 94, 0.4);
-}
-
-.primary-button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-/* ====== Status / error ====== */
-.status-bar,
-.error-bar {
-  margin-top: 8px;
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 12px;
-}
-
-.status-bar {
-  background: rgba(30, 64, 175, 0.16);
-  border: 1px solid rgba(59, 130, 246, 0.4);
-  color: #bfdbfe;
-}
-
-.error-bar {
-  background: rgba(127, 29, 29, 0.25);
-  border: 1px solid rgba(248, 113, 113, 0.6);
-  color: #fecaca;
-}
-
-/* Avvisi residuo 85K */
-.alert-warning {
-  margin-top: 6px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  background: rgba(250, 204, 21, 0.13);
-  border: 1px solid rgba(250, 204, 21, 0.55);
-  color: #facc15;
-}
-
-.alert-danger {
-  margin-top: 6px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  background: rgba(239, 68, 68, 0.18);
-  border: 1px solid rgba(248, 113, 113, 0.7);
-  color: #fecaca;
-}
-
-/* ====== Risultati ====== */
-.result-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.result-pill {
-  background: radial-gradient(circle at top left, #020617 0, #020617 40%, #020617 100%);
-  border-radius: 14px;
-  border: 1px solid #1f2937;
-  padding: 10px 12px;
-}
-
-.result-label {
-  font-size: 11px;
-  color: #9ca3af;
-  margin-bottom: 4px;
-}
-
-.result-value {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.result-subvalue {
-  font-size: 12px;
-  color: #9ca3af;
-  margin-top: 2px;
-}
-
-.highlight-green {
-  border-color: rgba(34, 197, 94, 0.6);
-  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25);
-}
-
-.highlight-amber {
-  border-color: rgba(234, 179, 8, 0.7);
-  box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.2);
-}
-
-.result-info {
-  margin-top: 14px;
-  font-size: 12px;
-  color: #9ca3af;
-}
-
-/* ====== Responsivo ====== */
-@media (max-width: 960px) {
-  .app-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 640px) {
-  .app-root {
-    padding: 16px;
-  }
-  .card {
-    padding: 14px 12px 16px;
-  }
-}
-/* --- Login / Buttons (MVP polish) --- */
-.button-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin-top: 6px;
-}
-
-@media (max-width: 900px) {
-  .button-row {
-    grid-template-columns: 1fr;
-  }
-}
-
+/* Se vuoi tenere qualche stile “di comodità” con @apply */
 .btn {
-  appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.92);
-  border-radius: 16px;
-  padding: 14px 16px;
-  font-weight: 650;
-  letter-spacing: 0.2px;
-  cursor: pointer;
-  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease,
-    border-color 160ms ease, opacity 160ms ease;
-  text-align: left;
-  width: 100%;
-}
-
-.btn:hover {
-  transform: translateY(-1px);
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
-}
-
-.btn:active {
-  transform: translateY(0px);
-}
-
-.btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(102, 204, 255, 0.25);
-}
-
-.btn[disabled] {
-  cursor: not-allowed;
-  opacity: 0.55;
-  transform: none;
-  box-shadow: none;
-}
-
-.btn-sub {
-  display: block;
-  margin-top: 6px;
-  font-weight: 500;
-  font-size: 12.5px;
-  color: rgba(255, 255, 255, 0.7);
+  @apply inline-flex items-center justify-center rounded-2xl px-4 py-3 font-semibold transition;
 }
 
 .btn-primary {
-  border: 1px solid rgba(120, 255, 160, 0.25);
-  background: linear-gradient(
-    90deg,
-    rgba(96, 200, 120, 0.9),
-    rgba(120, 170, 255, 0.9)
-  );
-  color: rgba(10, 16, 30, 0.95);
-}
-
-.btn-primary:hover {
-  border-color: rgba(120, 255, 160, 0.35);
+  @apply bg-emerald-500 text-slate-900 hover:brightness-110;
 }
 
 .btn-ghost {
-  background: rgba(255, 255, 255, 0.05);
+  @apply bg-slate-800 ring-1 ring-slate-700 hover:bg-slate-700;
 }
 
-.hint {
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 13px;
-  line-height: 1.4;
+.card {
+  @apply rounded-3xl border border-slate-800 bg-slate-900/40 p-6 shadow;
+}
+
+.card-soft {
+  @apply rounded-2xl border border-slate-800 bg-slate-950/40 p-4;
 }

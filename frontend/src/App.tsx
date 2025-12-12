@@ -1,47 +1,28 @@
 // frontend/src/App.tsx
-
 import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
-import LoginPage from "./pages/LoginPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import DashboardPage from "./pages/DashboardPage";
 import InvoicesPage from "./pages/InvoicesPage";
-import TaxPage from "./pages/TaxPage";
+import ProfilePage from "./pages/ProfilePage";
+
+// Se hai già una LoginPage, rimettila qui. Per ora redirectiamo all’onboarding.
+function LoginStub() {
+  return <Navigate to="/onboarding" replace />;
+}
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
-
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/onboarding" element={<OnboardingPage />} />
-
-      <Route
-        path="/dashboard"
-        element={
-          <Layout>
-            <DashboardPage />
-          </Layout>
-        }
-      />
-      <Route
-        path="/invoices"
-        element={
-          <Layout>
-            <InvoicesPage />
-          </Layout>
-        }
-      />
-      <Route
-        path="/tax"
-        element={
-          <Layout>
-            <TaxPage />
-          </Layout>
-        }
-      />
-
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      <Route element={<Layout />}>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/login" element={<LoginStub />} />
+        <Route path="/onboarding" element={<OnboardingPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/invoices" element={<InvoicesPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Route>
     </Routes>
   );
 }

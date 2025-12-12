@@ -1,56 +1,82 @@
 // frontend/src/components/Layout.tsx
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
-import { Link, useLocation } from "react-router-dom";
-
-function cx(...classes: Array<string | false | undefined | null>) {
+function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-export default function Layout({ children }: { children: React.ReactNode }) {
-  const { pathname } = useLocation();
-
-  const nav = [
-    { to: "/dashboard", label: "Dashboard" },
-    { to: "/invoices", label: "Fatture" },
-    { to: "/tax", label: "Imposte & F24" },
-  ];
+export default function Layout() {
+  const location = useLocation();
+  const isAuthPage =
+    location.pathname.startsWith("/login") || location.pathname.startsWith("/onboarding");
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-slate-800/60 ring-1 ring-slate-700" />
-            <div>
-              <div className="text-sm font-semibold leading-tight">IoForfettario</div>
-              <div className="text-xs text-slate-400 leading-tight">MVP • Fintech UX</div>
+      {/* Top bar */}
+      <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/80 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+          <Link to="/" className="group">
+            <div className="text-lg font-semibold tracking-tight">
+              IoForfettario
+              <span className="ml-2 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/20">
+                demo
+              </span>
+            </div>
+            <div className="text-xs text-slate-400 group-hover:text-slate-300 transition">
+              Tasse senza problemi
+            </div>
+          </Link>
+
+          {!isAuthPage && (
+            <nav className="hidden items-center gap-2 md:flex">
+              <NavTab to="/dashboard" label="La tua situazione" />
+              <NavTab to="/invoices" label="Le tue fatture" />
+              <NavTab to="/profile" label="Il tuo profilo" />
+            </nav>
+          )}
+        </div>
+
+        {/* Mobile tabs */}
+        {!isAuthPage && (
+          <div className="mx-auto max-w-5xl px-4 pb-3 md:hidden">
+            <div className="grid grid-cols-3 gap-2">
+              <NavTab to="/dashboard" label="Situazione" small />
+              <NavTab to="/invoices" label="Fatture" small />
+              <NavTab to="/profile" label="Profilo" small />
             </div>
           </div>
-
-          <nav className="hidden md:flex items-center gap-2">
-            {nav.map((n) => (
-              <Link
-                key={n.to}
-                to={n.to}
-                className={cx(
-                  "rounded-xl px-3 py-2 text-sm transition",
-                  pathname === n.to
-                    ? "bg-slate-800 text-white"
-                    : "text-slate-300 hover:bg-slate-900 hover:text-white"
-                )}
-              >
-                {n.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
+        )}
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      {/* Page */}
+      <main className="mx-auto max-w-5xl px-4 py-6">
+        <Outlet />
+      </main>
 
-      <footer className="mx-auto max-w-6xl px-4 pb-10 pt-2 text-xs text-slate-500">
-        © {new Date().getFullYear()} IoForfettario • Demo MVP (mock API)
+      <footer className="border-t border-slate-800">
+        <div className="mx-auto max-w-5xl px-4 py-6 text-xs text-slate-500">
+          MVP demo — dati simulati — niente valore legale/fiscale.
+        </div>
       </footer>
     </div>
+  );
+}
+
+function NavTab({ to, label, small }: { to: string; label: string; small?: boolean }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        cx(
+          "rounded-2xl px-4 py-2 text-sm font-semibold ring-1 transition",
+          small && "px-3 py-2 text-xs",
+          isActive
+            ? "bg-emerald-500/15 text-emerald-200 ring-emerald-500/30"
+            : "bg-slate-900/40 text-slate-200 ring-slate-800 hover:bg-slate-900/70 hover:ring-slate-700"
+        )
+      }
+    >
+      {label}
+    </NavLink>
   );
 }

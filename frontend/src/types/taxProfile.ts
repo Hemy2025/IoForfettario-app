@@ -1,29 +1,48 @@
 // frontend/src/types/taxProfile.ts
 
-export type ForfettarioCategory =
-  | "PROFESSIONISTA"
-  | "ARTIGIANO"
-  | "COMMERCIANTE";
+export type ForfettarioCategory = "PROFESSIONISTA" | "ARTIGIANO" | "COMMERCIANTE";
 
-export type PrevidenzaTipo =
-  | "GESTIONE_SEPARATA"
-  | "ARTIGIANI_COMMERCIANTI"
-  | "CASSA_PROFESSIONALE";
+export type PrevidenzaType = "GESTIONE_SEPARATA" | "ARTIGIANI_COMMERCIANTI";
 
 export interface UserTaxProfile {
   category: ForfettarioCategory;
-  previdenza: PrevidenzaTipo;
-
+  previdenza: PrevidenzaType;
   hasCassaProfessionale: boolean;
-  cassaAliquotaRivalsa?: number; // es. 0.04 se applicabile
-
-  aliquotaImpostaSostitutiva: number; // 0.05 o 0.15
+  aliquotaImpostaSostitutiva: number; // es. 0.05 o 0.15
 }
 
-/**
- * Profilo utente esteso per il frontend (possiamo aggiungere qui
- * altre preferenze, es. CCIAA, anno fiscale ecc.).
- */
 export interface StoredUserProfile extends UserTaxProfile {
-  ccIAA: number; // per ora un valore fisso per anno (es. 60€)
+  createdAtIso: string;
+  updatedAtIso: string;
+}
+
+export interface FiscalYearInput {
+  year: number;
+  fatturato: number;
+  contributiVersatiPrecedente: number;
+  imposteVersatePrecedente: number;
+  ccIAA: number;
+  rivalsaCassaTotale?: number;
+}
+
+export interface InvoiceItem {
+  id: string;
+  dateIso: string; // YYYY-MM-DD
+  descrizione: string;
+  importo: number;
+}
+
+export interface YearTaxContext {
+  profile: UserTaxProfile;
+  yearInput: FiscalYearInput;
+  fatturatoYtd: number;
+}
+
+export interface AccantonamentoResult {
+  fatturatoYtdPrima: number;
+  fatturatoYtdDopo: number;
+  residuoFatturabile: number;
+  haSuperatoSoglia: boolean;
+  accantonamentoTotale: number;
+  percentualeSuFattura: number;
 }
